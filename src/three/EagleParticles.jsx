@@ -4,88 +4,77 @@ import * as THREE from 'three';
 import { buildEagleHomes } from '../lib/eagleFormation.js';
 
 // ----------------------------------------------------------------------------
-// Redesigned from a "snap into an eagle shape" point cloud into something
-// closer to dust motes settling in still, warm-lit air. Two changes carry
-// almost all of the new feel:
-//
-// 1. Physics: the spring constant dropped by ~4x and damping is now strong
-//    enough that the system is close to critically damped rather than
-//    underdamped — velocity dies out before it can build up enough to
-//    overshoot and oscillate. Concretely: weak pull + strong drag = smooth
-//    monotonic drift toward the target, never a springy snap. The pointer
-//    repel force is a gentle eddy now, not a scatter.
-// 2. Rendering: one muted warm-gray colour (no more brass/paper two-tone —
-//    true monochrome), smaller point sizes, and a much lower opacity
-//    ceiling, so no cluster of overlapping, additively-blended points can
-//    sum past a soft glow into blown-out white.
+// The original hero had a 2D canvas particle field (140 points, spring-to-home
+// + pointer-repel physics) drawing an eagle-wing silhouette *behind* a
+// separate vanilla-Three.js medallion — two different rendering technologies
+// bolted together, sharing an anchor point only approximately. This is the
+// same spring/repel physics, ported wholesale (SPRING/DAMPING/REPEL constants
+// map directly), but as real points living in the same scene, same camera,
+// same lights as the medallion — so it's one composition, not two.
 // ----------------------------------------------------------------------------
 
 const VERTEX_SHADER = `
   attribute float aSize;
+  attribute vec3 aColor;
+  varying vec3 vColor;
   varying float vFade;
   void main() {
+    vColor = aColor;
     vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
     float dist = -mvPosition.z;
     gl_PointSize = aSize * (6.0 / max(dist, 0.001));
-    float depthFade = smoothstep(3.0, 9.0, dist);
-    vFade = 1.0 - depthFade * 0.7;
+    float t = smoothstep(3.0, 9.0, dist);
+    vFade = 1.0 - t * 0.65;
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
-// A fully soft radial falloff (smoothstep from the point's centre all the
-// way to its edge, no near-hard disc in the middle as before) — this alone
-// is a large part of why these now read as fine, soft motes instead of
-// little glowing discs.
 const FRAGMENT_SHADER = `
-  uniform vec3 uColor;
-  uniform float uOpacity;
+  varying vec3 vColor;
   varying float vFade;
   void main() {
     vec2 uv = gl_PointCoord - vec2(0.5);
     float d = length(uv);
-    float soft = smoothstep(0.5, 0.0, d);
-    float alpha = soft * vFade * uOpacity;
-    if (alpha < 0.008) discard;
-    gl_FragColor = vec4(uColor, alpha);
+    float alpha = smoothstep(0.5, 0.02, d) * vFade;
+    if (alpha < 0.02) discard;
+    gl_FragColor = vec4(vColor, alpha);
   }
 `;
 
-const COUNT = 240;
-// A single desaturated warm gray — deliberately monochrome. Tune this one
-// value to shift the whole swarm's tone; there is nowhere else to change it.
-const PARTICLE_COLOR = new THREE.Color('#b7ad9c');
-// Ceiling on any single point's alpha. Kept well below 1 specifically so
-// that additive overlap between several overlapping points still can't sum
-// to pure white — see the note on tone mapping in SealScene.jsx for the
-// complementary, scene-wide half of this.
-const OPACITY_CEILING = 0.34;
+const COUNT = 170;
+const BRASS = new THREE.Color('#e7be5a');
+const PAPER = new THREE.Color('#f3ecda');
 
-// Overdamped "still air" physics: weak spring, strong drag.
-const SPRING = 0.85;
-const DAMPING_HALF_LIFE = 0.16;
-const REPEL_RADIUS = 0.95;
-const REPEL_STRENGTH = 1.7;
+// Same spring/damping/repel shape as the original's 2D field, retuned for
+// world units instead of pixels.
+const SPRING = 3.4;
+const DAMPING_HALF_LIFE = 0.22;
+const REPEL_RADIUS = 1.15;
+const REPEL_STRENGTH = 5.2;
 
 export default function EagleParticles() {
   const pointsRef = useRef(null);
   const { raycaster, pointer, camera } = useThree();
 
-  const { positions, velocities, homes, sizes, plane, hitPoint, uniforms } = useMemo(() => {
+  const { positions, velocities, homes, sizes, colors, plane, hitPoint } = useMemo(() => {
     const homes = buildEagleHomes(COUNT);
     const positions = new Float32Array(COUNT * 3);
     const velocities = new Float32Array(COUNT * 3);
     const sizes = new Float32Array(COUNT);
+    const colors = new Float32Array(COUNT * 3);
     const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
 
     for (let i = 0; i < COUNT; i++) {
-      // Start scattered; the (now much gentler) spring lets them drift into
-      // formation over several seconds rather than snapping together.
-      positions[i * 3] = (Math.random() - 0.5) * 7.5;
-      positions[i * 3 + 1] = (Math.random() - 0.5) * 7.5;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * 4.5;
-      // Ultra-fine: roughly half the pixel size of the previous version.
-      sizes[i] = (1.3 + Math.random() * 2.1) * dpr;
+      // Particles start scattered and spring into the eagle formation on
+      // mount, rather than appearing already-formed.
+      positions[i * 3] = (Math.random() - 0.5) * 7;
+      positions[i * 3 + 1] = (Math.random() - 0.5) * 7;
+      positions[i * 3 + 2] = (Math.random() - 0.5) * 4;
+      sizes[i] = (3 + Math.random() * 5) * dpr;
+      const c = i % 6 === 0 ? BRASS : PAPER;
+      colors[i * 3] = c.r;
+      colors[i * 3 + 1] = c.g;
+      colors[i * 3 + 2] = c.b;
     }
 
     return {
@@ -93,12 +82,9 @@ export default function EagleParticles() {
       velocities,
       homes,
       sizes,
+      colors,
       plane: new THREE.Plane(new THREE.Vector3(0, 0, 1), 0),
       hitPoint: new THREE.Vector3(),
-      uniforms: {
-        uColor: { value: PARTICLE_COLOR },
-        uOpacity: { value: OPACITY_CEILING },
-      },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -158,11 +144,11 @@ export default function EagleParticles() {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
         <bufferAttribute attach="attributes-aSize" args={[sizes, 1]} />
+        <bufferAttribute attach="attributes-aColor" args={[colors, 3]} />
       </bufferGeometry>
       <shaderMaterial
         vertexShader={VERTEX_SHADER}
         fragmentShader={FRAGMENT_SHADER}
-        uniforms={uniforms}
         transparent
         depthWrite={false}
         blending={THREE.AdditiveBlending}

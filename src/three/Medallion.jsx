@@ -1,49 +1,49 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 
-// The "seal" — now closer to a piece of bespoke architectural hardware than
-// a game-loot medallion. Two deliberate departures from the previous
-// version:
-//
-// 1. No iridescence, no emissive glow. Both read as "digital" the instant
-//    you see them in motion — a rainbow-shifting metal or a self-lit object
-//    are shorthand for game/UI chrome, not for a physical object sitting in
-//    a lit room. Removing them is most of what makes this feel quieter.
-// 2. No independent rotation of its own. Every degree of motion this piece
-//    now has comes from the shared tilt group in SealScene.jsx, which is
-//    driven entirely by scroll position and pointer parallax — so this
-//    component is purely geometry + material, nothing animated locally.
+// The "seal" — a brushed-brass ring around a faceted clay-and-clearcoat
+// core. Same two-geometry composition as the original vanilla scene (a
+// TorusGeometry ring + an IcosahedronGeometry core at the same proven
+// dimensions), elevated with material properties the original didn't reach
+// for: iridescence on the ring (a subtle shifting rainbow-in-metal that only
+// modern MeshPhysicalMaterial supports) and a warm emissive glow on the core
+// so it reads as lit-from-within without needing bloom post-processing.
 export default function Medallion() {
+  const ringRef = useRef(null);
+  const coreRef = useRef(null);
+
+  useFrame((_state, rawDelta) => {
+    const dt = Math.min(rawDelta, 1 / 15);
+    if (ringRef.current) ringRef.current.rotation.y += dt * 0.22;
+    if (coreRef.current) {
+      coreRef.current.rotation.y -= dt * 0.5;
+      coreRef.current.rotation.x += dt * 0.18;
+    }
+  });
+
   return (
     <group>
-      <mesh castShadow receiveShadow>
+      <mesh ref={ringRef} castShadow receiveShadow>
         <torusGeometry args={[1.15, 0.09, 32, 100]} />
-        {/* Brushed champagne-bronze metal: still reads as metal (high
-            metalness) but the roughness increase from 0.3 to 0.62 is what
-            actually kills the "shiny loot" specular ping — it widens the
-            BRDF's highlight lobe from a tight point into a broad, soft
-            gradient, which is the physical difference between polished and
-            brushed/sandblasted metal. */}
         <meshPhysicalMaterial
-          color="#9a8d78"
-          metalness={0.82}
-          roughness={0.62}
-          envMapIntensity={1}
+          color="#c4991f"
+          metalness={0.88}
+          roughness={0.3}
+          iridescence={0.35}
+          iridescenceIOR={1.3}
+          iridescenceThicknessRange={[100, 400]}
         />
       </mesh>
-      <mesh castShadow receiveShadow>
+      <mesh ref={coreRef} castShadow receiveShadow>
         <icosahedronGeometry args={[0.62, 1]} />
-        {/* A pale warm alabaster core — non-metal, low clearcoat for a soft
-            satin sheen rather than a glassy double-highlight, no emissive.
-            It's lit entirely by the environment/key light now, which is
-            more physically honest and reads as inert stone/ceramic rather
-            than a light-emitting prop. */}
         <meshPhysicalMaterial
-          color="#e4dccb"
-          metalness={0.04}
-          roughness={0.58}
-          clearcoat={0.18}
-          clearcoatRoughness={0.5}
-          envMapIntensity={0.85}
+          color="#f3ecda"
+          roughness={0.5}
+          metalness={0.06}
+          clearcoat={0.4}
+          clearcoatRoughness={0.35}
+          emissive="#c4991f"
+          emissiveIntensity={0.06}
         />
       </mesh>
     </group>

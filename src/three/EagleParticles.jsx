@@ -1,6 +1,7 @@
 import React, { useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { SimplexNoise } from 'three/addons/math/SimplexNoise.js';
 import { buildEagleHomes } from '../lib/eagleFormation.js';
 
 // ----------------------------------------------------------------------------
@@ -11,6 +12,19 @@ import { buildEagleHomes } from '../lib/eagleFormation.js';
 // same spring/repel physics, ported wholesale (SPRING/DAMPING/REPEL constants
 // map directly), but as real points living in the same scene, same camera,
 // same lights as the medallion — so it's one composition, not two.
+//
+// Two refinements on top of that port:
+//  - The pointer-repel falloff was a rigid linear ramp (1 - dist/radius). It's
+//    now smoothstep-eased, so the push cushions in and out instead of
+//    starting/stopping abruptly at the repel radius.
+//  - Once settled, particles used to sit dead still at their home position —
+//    all motion was reactive, nothing was ambient. Each particle's target is
+//    now its home position plus a slow-moving 4D Simplex noise offset (x, y,
+//    z, and time), sampled in the particle's own space so neighbors drift in
+//    the same slow eddies rather than shaking independently. The spring still
+//    chases that (now gently moving) target with the same frame-rate-
+//    independent integration as before, so the formation continuously
+//    breathes instead of freezing once it arrives.
 // ----------------------------------------------------------------------------
 
 const VERTEX_SHADER = `
@@ -52,9 +66,17 @@ const DAMPING_HALF_LIFE = 0.22;
 const REPEL_RADIUS = 1.15;
 const REPEL_STRENGTH = 5.2;
 
+// Ambient drift applied on top of each particle's home position: low
+// frequency and low amplitude so it reads as a slow, cohesive breathing
+// motion rather than jitter.
+const NOISE_FREQ = 0.5;
+const NOISE_SPEED = 0.18;
+const NOISE_AMP = 0.045;
+
 export default function EagleParticles() {
   const pointsRef = useRef(null);
   const { raycaster, pointer, camera } = useThree();
+  const noise = useMemo(() => new SimplexNoise(), []);
 
   const { positions, velocities, homes, sizes, colors, plane, hitPoint } = useMemo(() => {
     const homes = buildEagleHomes(COUNT);
@@ -89,12 +111,13 @@ export default function EagleParticles() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useFrame((_state, rawDelta) => {
+  useFrame((state, rawDelta) => {
     const dt = Math.min(rawDelta, 1 / 15);
     const geometry = pointsRef.current?.geometry;
     if (!geometry) return;
     const posAttr = geometry.attributes.position;
     const arr = posAttr.array;
+    const time = state.clock.elapsedTime;
 
     raycaster.setFromCamera(pointer, camera);
     const hasHit = raycaster.ray.intersectPlane(plane, hitPoint);
@@ -104,9 +127,25 @@ export default function EagleParticles() {
       const iy = ix + 1;
       const iz = ix + 2;
 
-      let ax = (homes[ix] - arr[ix]) * SPRING;
-      let ay = (homes[iy] - arr[iy]) * SPRING;
-      let az = (homes[iz] - arr[iz]) * SPRING;
+      const hx = homes[ix];
+      const hy = homes[iy];
+      const hz = homes[iz];
+
+      // Sample the same noise field three times with offset coordinates to
+      // get three decorrelated-enough channels for x/y/z drift, all keyed
+      // off the particle's own resting position so spatially close
+      // particles drift together.
+      const nx = noise.noise4d(hx * NOISE_FREQ, hy * NOISE_FREQ, hz * NOISE_FREQ, time * NOISE_SPEED);
+      const ny = noise.noise4d(hx * NOISE_FREQ + 19.7, hy * NOISE_FREQ, hz * NOISE_FREQ, time * NOISE_SPEED);
+      const nz = noise.noise4d(hx * NOISE_FREQ, hy * NOISE_FREQ + 41.3, hz * NOISE_FREQ, time * NOISE_SPEED);
+
+      const targetX = hx + nx * NOISE_AMP;
+      const targetY = hy + ny * NOISE_AMP;
+      const targetZ = hz + nz * NOISE_AMP;
+
+      let ax = (targetX - arr[ix]) * SPRING;
+      let ay = (targetY - arr[iy]) * SPRING;
+      let az = (targetZ - arr[iz]) * SPRING;
 
       if (hasHit) {
         const dx = arr[ix] - hitPoint.x;
@@ -115,7 +154,11 @@ export default function EagleParticles() {
         const distSq = dx * dx + dy * dy + dz * dz;
         if (distSq < REPEL_RADIUS * REPEL_RADIUS) {
           const dist = Math.sqrt(distSq) || 0.001;
-          const force = (1 - dist / REPEL_RADIUS) * REPEL_STRENGTH;
+          // Smoothstep-eased falloff (was a linear 1 - dist/radius ramp), so
+          // the repel force cushions in and out instead of ramping rigidly.
+          const n = 1 - dist / REPEL_RADIUS;
+          const eased = n * n * (3 - 2 * n);
+          const force = eased * REPEL_STRENGTH;
           ax += (dx / dist) * force;
           ay += (dy / dist) * force;
           az += (dz / dist) * force;

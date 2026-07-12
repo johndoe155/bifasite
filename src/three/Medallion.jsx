@@ -1,13 +1,17 @@
 import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 
-// The "seal" — a brushed-brass ring around a faceted clay-and-clearcoat
+// The "seal" — a brushed-brass ring around a smooth clay-and-clearcoat
 // core. Same two-geometry composition as the original vanilla scene (a
-// TorusGeometry ring + an IcosahedronGeometry core at the same proven
-// dimensions), elevated with material properties the original didn't reach
-// for: iridescence on the ring (a subtle shifting rainbow-in-metal that only
+// TorusGeometry ring + a spherical core at the same proven dimensions),
+// elevated with material properties the original didn't reach for:
+// iridescence on the ring (a subtle shifting rainbow-in-metal that only
 // modern MeshPhysicalMaterial supports) and a warm emissive glow on the core
-// so it reads as lit-from-within without needing bloom post-processing.
+// so it reads as lit-from-within without needing bloom post-processing. The
+// core was previously a low-detail IcosahedronGeometry (a visibly faceted
+// gem shape); it's now a 64x64-segment SphereGeometry with flat shading
+// explicitly disabled, so it renders as a mathematically smooth sphere with
+// continuous normal interpolation instead of flat facets.
 export default function Medallion() {
   const ringRef = useRef(null);
   const coreRef = useRef(null);
@@ -35,7 +39,7 @@ export default function Medallion() {
         />
       </mesh>
       <mesh ref={coreRef} castShadow receiveShadow>
-        <icosahedronGeometry args={[0.62, 1]} />
+        <sphereGeometry args={[0.62, 64, 64]} />
         <meshPhysicalMaterial
           color="#f3ecda"
           roughness={0.5}
@@ -44,6 +48,7 @@ export default function Medallion() {
           clearcoatRoughness={0.35}
           emissive="#c4991f"
           emissiveIntensity={0.06}
+          flatShading={false}
         />
       </mesh>
     </group>

@@ -269,9 +269,11 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 }
 .track-sticky {
   position: sticky; top: 0; height: 100vh;
-  display: flex; align-items: center; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-start; align-items: stretch;
+  padding-top: 72px; padding-bottom: 48px; gap: 24px;
+  overflow: hidden; overflow-y: auto;
 }
-.track-heading { position: absolute; top: 60px; left: 0; right: 0; padding: 0 32px; text-align: center; z-index: 3; pointer-events: none; }
+.track-heading { position: relative; padding: 0 32px; text-align: center; z-index: 3; pointer-events: none; }
 .track-heading > * { pointer-events: auto; }
 .track-heading p { max-width: 560px; margin: 12px auto 0; font-weight: 300; color: var(--text-soft); }
 .surface-dark .track-heading p { color: var(--text-on-dark-soft); }
@@ -437,13 +439,6 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .track-image { height: 420px; }
 }
 @media (max-width: 760px) {
-  .hero-glow {
-    top: -10%;
-    right: -20%;
-    width: 90vw;
-    height: 55%;
-  }	
-
   .nav-links { display: none; }
   .menu-toggle { display: block; }
   .container { padding: 0 22px; }
@@ -451,19 +446,6 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
   .hero-content { padding-top: 108px; }
   .site-footer-bottom { padding-left: 22px; padding-right: 22px; }
 
-  .track-sticky {
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
-    padding-top: 72px;
-    padding-bottom: 48px;
-    gap: 24px;
-    overflow-y: auto;
-  }
-  .track-heading {
-    position: relative;
-    top: auto;
-    padding: 0 22px;
-  }
+  .track-heading { padding: 0 22px; }
   .track-image { height: 300px; }
 }

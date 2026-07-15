@@ -433,17 +433,6 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 /* ============================================================================
    RESPONSIVE
    ============================================================================ */
-/* Desktop-only: the pinned track content (section intro heading + the
-   horizontal-scroll panels) was flush against the top of the 100vh sticky
-   viewport. That crowded the panels up under the fixed nav and left no
-   room for the section's intro text box to render, making it look like it
-   had vanished. Centering the group restores the intro text and gives the
-   panels breathing room. Mobile/reduced-motion aren't touched: both switch
-   .track-sticky to display:block via .track-fallback, where
-   justify-content has no effect. */
-@media (min-width: 981px) {
-  .track-sticky { justify-content: center; }
-}
 @media (max-width: 980px) {
   .section { padding: 90px 0; }
   .section-header { margin-bottom: 56px; }
@@ -459,4 +448,8 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
 
   .track-heading { padding: 0 22px; }
   .track-image { height: 300px; }
+}
+
+@media (min-width: 761px) {
+  .track-sticky { overflow-y: hidden; }
 }
